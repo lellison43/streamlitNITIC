@@ -1,52 +1,131 @@
 import yfinance as yf
 import pandas as pd
 import streamlit as st
+import numpy as np
 
+# Download stock data
 def fetch_data(tickers, start_date, end_date):
     data_frames = []
+
     for ticker in tickers:
-        stock_data = yf.download(ticker, start=start_date, end=end_date)['Close']
+        stock_data = yf.download(
+            ticker,
+            start=start_date,
+            end=end_date,
+            progress=False
+        )['Close']
+
         data_frames.append(stock_data)
-    
+
     data = pd.concat(data_frames, axis=1, keys=tickers)
     data.columns = tickers
+
     return data
 
+
+# Annualized Sharpe Ratio
 def calculate_sharpe_ratio(returns, risk_free_rate=0.02):
-    portfolio_return = returns.mean().mean()
-    portfolio_volatility = returns.std().mean()
-    return (portfolio_return - risk_free_rate) / portfolio_volatility
+    daily_rf = risk_free_rate / 252
 
+    excess_returns = returns - daily_rf
+
+    sharpe_ratios = (
+        excess_returns.mean() /
+        excess_returns.std()
+    ) * np.sqrt(252)
+
+    return sharpe_ratios
+
+
+# Annualized Sortino Ratio
 def calculate_sortino_ratio(returns, risk_free_rate=0.02):
-    portfolio_return = returns.mean().mean()
-    downside_returns = returns[returns < 0]
-    downside_deviation = downside_returns.std().mean()
-    return (portfolio_return - risk_free_rate) / downside_deviation
+    daily_rf = risk_free_rate / 252
+
+    excess_returns = returns - daily_rf
+
+    downside_returns = excess_returns.where(excess_returns < 0)
+
+    downside_deviation = downside_returns.std()
+
+    sortino_ratios = (
+        excess_returns.mean() /
+        downside_deviation
+    ) * np.sqrt(252)
+
+    return sortino_ratios
 
 
+# Streamlit App
 st.title("Financial Analysis Web App")
 
 # User inputs
-tickers = st.text_input("Enter stock tickers (comma separated)", "AAPL, MSFT, GOOG").split(",")
-tickers = [ticker.strip() for ticker in tickers]
-start_date = st.date_input("Start Date", pd.to_datetime("2020-01-01"))
-end_date = st.date_input("End Date", pd.to_datetime("2023-01-01"))
+tickers = st.text_input(
+    "Enter stock tickers (comma separated)",
+    "AAPL, MSFT, GOOG"
+).split(",")
+
+tickers = [ticker.strip().upper() for ticker in tickers]
+
+start_date = st.date_input(
+    "Start Date",
+    pd.to_datetime("2020-01-01")
+)
+
+end_date = st.date_input(
+    "End Date",
+    pd.to_datetime("2023-01-01")
+)
+
+risk_free_rate = st.number_input(
+    "Annual Risk-Free Rate",
+    min_value=0.0,
+    max_value=0.20,
+    value=0.02,
+    step=0.005,
+    format="%.3f"
+)
 
 # Fetch stock data
 stock_data = fetch_data(tickers, start_date, end_date)
+
+# Calculate daily returns
 returns_data = stock_data.pct_change().dropna()
 
-# Visualizations
+# Charts
 st.subheader("Stock Prices")
 st.line_chart(stock_data)
 
-st.subheader("Stock Returns")
+st.subheader("Daily Returns")
 st.line_chart(returns_data)
 
-sharpe_ratio = calculate_sharpe_ratio(returns_data)
-sortino_ratio = calculate_sortino_ratio(returns_data)
+# Calculate metrics
+sharpe_ratios = calculate_sharpe_ratio(
+    returns_data,
+    risk_free_rate
+)
+
+sortino_ratios = calculate_sortino_ratio(
+    returns_data,
+    risk_free_rate
+)
+
+# Display metrics
+metrics = pd.DataFrame({
+    "Sharpe Ratio": sharpe_ratios,
+    "Sortino Ratio": sortino_ratios
+})
 
 st.subheader("Performance Metrics")
-st.write(f"Sharpe Ratio: {sharpe_ratio:.2f}")
-st.write(f"Sortino Ratio: {sortino_ratio:.2f}")
+st.dataframe(metrics.round(3))
 
+# Optional summary statistics
+st.subheader("Return Statistics")
+
+summary_stats = pd.DataFrame({
+    "Annualized Return (%)":
+        returns_data.mean() * 252 * 100,
+    "Annualized Volatility (%)":
+        returns_data.std() * np.sqrt(252) * 100
+})
+
+st.dataframe(summary_stats.round(2))
