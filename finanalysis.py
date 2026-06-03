@@ -54,6 +54,9 @@ def calculate_sortino_ratio(returns, risk_free_rate=0.02):
 
     return sortino_ratios
 
+def portfolio_optimization(returns):
+    return np.ones(len(returns.columns)) / len(returns.columns)
+
 
 # Streamlit App
 st.title("Financial Analysis Web App")
@@ -129,3 +132,13 @@ summary_stats = pd.DataFrame({
 })
 
 st.dataframe(summary_stats.round(2))
+
+optimal_weights = portfolio_optimization(returns_data)
+
+st.subheader("Portfolio Optimization")
+st.write("Optimal Portfolio Weights:")
+for ticker, weight in zip(tickers, optimal_weights):
+    st.write(f"{ticker}: {weight:.2%}")
+
+csv_data = stock_data.to_csv()
+st.download_button("Download Stock Data CSV", csv_data, "stock_data.csv")
